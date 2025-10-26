@@ -17,28 +17,22 @@
     header{display:flex; align-items:center; justify-content:center; gap:.5rem;}
     header h1{font-weight:800; letter-spacing:.02em; margin:.2rem 0 1rem 0; text-align:center}
 
-    /* Board */
     #board{ display:flex; flex-direction:column; align-items:center; gap:var(--gap); margin: 0 0 1rem 0; }
-    .row{ display:grid; grid-template-columns: repeat(5, var(--size)); gap:var(--gap); }
-    .tile{ display:flex; align-items:center; justify-content:center; font-weight:800; text-transform:uppercase; border:2px solid var(--tile-border); background:var(--tile); border-radius:var(--radius); font-size:1.3rem; }
+    .row{ display:flex; justify-content:center; align-items:center; gap:var(--gap); position:relative; }
+    .tile{ display:flex; align-items:center; justify-content:center; font-weight:800; text-transform:uppercase; border:2px solid var(--tile-border); background:var(--tile); border-radius:var(--radius); font-size:1.3rem; width:var(--size); height:var(--size); }
     .tile.empty{ background:transparent; }
 
-    /* Reveal states */
     .tile.correct{ background:var(--green); border-color:var(--green); color:white; }
     .tile.present{ background:var(--yellow); border-color:var(--yellow); color:white; }
     .tile.absent{ background:var(--gray); border-color:var(--gray); color:white; }
 
-    /* Animations */
     .tile.bump{ animation: bump .12s ease-in-out; }
     @keyframes bump{ 0%{ transform:scale(1); } 50%{ transform:scale(1.08) } 100%{ transform:scale(1) } }
-
     .tile.reveal{ animation: flip .45s ease forwards; transform-style: preserve-3d; }
     @keyframes flip{ 0%{ transform: rotateX(0deg); } 50%{ transform: rotateX(90deg); } 100%{ transform: rotateX(0deg); } }
-
     .tile.fade{ animation: fade .35s ease; }
     @keyframes fade{ from{ opacity:.15 } to{ opacity:1 } }
 
-    /* Keyboard */
     #kb{ display:flex; flex-direction:column; align-items:center; gap:.4rem; user-select:none; }
     .kb-row{ display:flex; justify-content:center; gap:.35rem; }
     button.key{ padding:.8rem .2rem; min-width:2.4rem; border:0; border-radius:.6rem; background:var(--dark); color:var(--fg); font-weight:700; text-transform:uppercase; letter-spacing:.02em; box-shadow: 0 1px 0 rgba(0,0,0,.4); }
@@ -49,36 +43,34 @@
     .key.present{ background:var(--yellow); color:white; }
     .key.correct{ background:var(--green); color:white; }
 
-    /* win modal */
     .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:20; }
     .modal{ background:var(--tile); border-radius:1rem; padding:2rem 1.4rem; max-width:20rem; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.5); }
     .modal h2{ margin-top:0; color:var(--green); }
     .modal-overlay.show{ display:flex; animation: fade .4s ease; }
 
-    /* win images */
     .win{ display:none; justify-content:space-between; align-items:center; margin-top:1rem; gap:1rem; }
-    .win.show{ display:flex; }
-    .win img{ width:48%; border-radius:1rem; box-shadow:0 10px 24px rgba(0,0,0,.35); }
+    .win.show{ display:flex; animation: fade .6s ease; }
+    .win img{ width:48%; border-radius:1rem; box-shadow:0 10px 24px rgba(0,0,0,.35); transform:scale(0.9); opacity:0; animation: popIn .6s ease forwards; }
+    .win.show img:nth-child(1){ animation-delay:.2s; }
+    .win.show img:nth-child(2){ animation-delay:.4s; }
+    @keyframes popIn{ to{ transform:scale(1); opacity:1 } }
 
     .pad{ padding-bottom: calc(env(safe-area-inset-bottom) + .5rem) }
+    .wink{ position:absolute; right:-2rem; font-size:1.4rem; opacity:0; animation:winkIn .8s ease forwards; }
+    @keyframes winkIn{ to{ opacity:1; transform:rotate(5deg); } }
   </style>
 </head>
 <body>
   <div class="app pad">
-    <header>
-      <h1>Alexas Wordle</h1>
-    </header>
-
+    <header><h1>Alexas Wordle</h1></header>
     <main>
       <div id="board" aria-live="polite"></div>
-
       <div id="kb" aria-label="Tastatur">
         <div class="kb-row" data-row="1"></div>
         <div class="kb-row" data-row="2"></div>
         <div class="kb-row" data-row="3"></div>
         <div class="kb-row" data-row="4"></div>
       </div>
-
       <div class="win" id="win">
         <img src="assets/törken-türken.png" alt="Gewonnen 1" />
         <img src="assets/3Gsq8_1751010233_8613.webp" alt="Gewonnen 2" />
@@ -86,12 +78,11 @@
       </div>
     </main>
   </div>
-
   <div class="modal-overlay" id="win-modal">
     <div class="modal">
       <h2>Herzlichen Glückwunsch!</h2>
-      <p>Alles gute zum Geburtstag Alexa!</p>
-      <button id="close-modal" class="key small" style="margin-top:1rem">Schließen</button>
+      <p>&lt;3 Alles gute zum Geburtstag Alexa! &lt;3</p>
+      <button id="close-modal" class="key small" style="margin-top:1rem">x</button>
     </div>
   </div>
 
@@ -100,6 +91,9 @@
     const MAX_BASE_ROWS = 6;
     const WORD_LENGTH = 5;
     const REVEAL_DELAY = 420;
+    const START_WORD = "adieu";
+
+    let isAnimating = false;
 
     const board = document.getElementById('board');
     const winBox = document.getElementById('win');
@@ -153,7 +147,7 @@
     function isLetterKey(k){ return /^[a-zäöüß]$/i.test(k); }
 
     function addLetter(letter){
-      if (finished) return;
+      if (finished || isAnimating) return;
       if (currentCol >= WORD_LENGTH) return;
       const row = board.children[currentRow];
       const tile = row.children[currentCol];
@@ -169,7 +163,7 @@
     }
 
     function backspace(){
-      if (finished) return;
+      if (finished || isAnimating) return;
       if (currentCol === 0) return;
       const row = board.children[currentRow];
       const tile = row.children[currentCol-1];
@@ -227,13 +221,11 @@
     }
 
     function ensureNextRow(){
-      if (currentRow >= board.children.length-1){
-        makeRow();
-      }
+      if (currentRow >= board.children.length-1){ makeRow(); }
     }
 
     async function submit(){
-      if (finished) return;
+      if (finished || isAnimating) return;
       if (currentCol < WORD_LENGTH) return;
       const guess = getCurrentGuess().toLowerCase();
       if (!/^[a-zäöüß]{5}$/i.test(guess)) return;
@@ -241,28 +233,15 @@
       const scoring = scoreGuess(guess, SECRET_WORD);
       await revealRow(guess, scoring);
 
-      if (guess === SECRET_WORD){
-        finished = true;
-        showWin();
-        try{ await winAudio.play(); }catch{}
-        return;
-      }
-
-      currentRow++;
-      currentCol = 0;
-      ensureNextRow();
+      if (guess === SECRET_WORD){ finished = true; showWin(); try{ await winAudio.play(); }catch{} return; }
+      currentRow++; currentCol = 0; ensureNextRow();
     }
 
-    function showWin(){
-      winBox.classList.add('show');
-      winModal.classList.add('show');
-    }
+    function showWin(){ winBox.classList.add('show'); winModal.classList.add('show'); }
 
     kb.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button.key');
-      if (!btn) return;
-      const key = btn.dataset.key;
-      if (!key) return;
+      const btn = e.target.closest('button.key'); if (!btn) return;
+      const key = btn.dataset.key; if (!key) return;
       if (isLetterKey(key)) return addLetter(key);
       if (key === '←') return backspace();
       if (key === 'send') return submit();
@@ -276,8 +255,28 @@
       else if (k === 'enter') submit();
     });
 
-    closeModal.addEventListener('click', ()=>{
-      winModal.classList.remove('show');
+    closeModal.addEventListener('click', ()=>{ winModal.classList.remove('show'); });
+
+    // === Auto Startword Animation ===
+    window.addEventListener('load', async () => {
+        isAnimating = true;
+        const startGuess = START_WORD;
+        const row = board.children[currentRow];
+        for (let i = 0; i < WORD_LENGTH; i++) {
+            const tile = row.children[i];
+            tile.textContent = startGuess[i].toUpperCase();
+            tile.classList.remove('empty');
+        }
+        const scoring = scoreGuess(startGuess, SECRET_WORD);
+        await revealRow(startGuess, scoring);
+        const wink = document.createElement('span');
+        wink.className = 'wink';
+        wink.textContent = ';)';
+        row.appendChild(wink);
+        currentRow++;
+        currentCol = 0;
+        ensureNextRow();
+        isAnimating = false; 
     });
   </script>
 </body>
